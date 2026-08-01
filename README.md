@@ -4,25 +4,36 @@ A Minecraft Bedrock Edition addon that adds a rideable unicorn: a custom entity 
 geometry, texture, and animations, tameable-free riding (walk up and interact to mount), and a
 rare natural spawn.
 
+![Unicorn preview](assets/preview.png)
+
+*Rendered directly from the model data in `tools/unicorn_model.py` by `tools/render_preview.py` --
+not a hand-picked screenshot, so it can never show a different model than what actually ships.*
+
 ## Structure
 
 ```
 UnicornAddon_BP/       Behavior pack -- entity definition, spawn rules
 UnicornAddon_RP/       Resource pack -- geometry, texture, animations, render controller
 UnicornAddon_TestBP/   Dev-only behavior pack -- automated in-game self-test (see below)
+assets/
+  preview.png          README screenshot, rendered by tools/render_preview.py
 tools/
-  generate_addon.py    Generates every BP/RP file from one set of Python data structures
+  unicorn_model.py      Shared source of truth: the unicorn's bones/cubes/colors + geometry math
+  generate_addon.py     Generates every BP/RP file from unicorn_model.py
+  render_preview.py     Renders assets/preview.png from the same unicorn_model.py data
+  png_writer.py          Minimal PNG encoder shared by the two generators above
   sync-to-minecraft.ps1     Copies the packs into Minecraft's dev pack folders
   activate-in-world.ps1     Activates the packs inside an existing world save
 UnicornAddon.mcaddon    Packaged build (not committed -- see Packaging below)
 ```
 
-`UnicornAddon_BP` and `UnicornAddon_RP` are generated output. `tools/generate_addon.py` is the
-actual source: it defines the unicorn's bones/cubes once and derives the `.geo.json`, the
-hand-painted texture PNG, and every UV coordinate from that single source, so bone names, UUIDs,
-and texture regions can never drift out of sync with each other. To change the model, texture
-palette, or entity components, edit `tools/generate_addon.py` and regenerate -- don't hand-edit
-the JSON/PNG under `UnicornAddon_BP`/`UnicornAddon_RP` directly.
+`UnicornAddon_BP` and `UnicornAddon_RP` are generated output. `tools/unicorn_model.py` is the
+actual source: it defines the unicorn's bones/cubes once, and both `tools/generate_addon.py` (the
+`.geo.json` + hand-painted texture + every UV coordinate) and `tools/render_preview.py` (the README
+screenshot above) derive from that single source, so the model, the addon, and its preview image
+can never drift out of sync with each other. To change the model or texture palette, edit
+`tools/unicorn_model.py` and regenerate both -- don't hand-edit the JSON/PNG under
+`UnicornAddon_BP`/`UnicornAddon_RP` directly.
 
 ## Requirements
 
@@ -38,6 +49,13 @@ python tools/generate_addon.py
 Regenerates `UnicornAddon_BP` and `UnicornAddon_RP` in place. The script asserts model geometry
 sanity at build time (feet touch the ground, no detached mane pieces, UV rects stay in bounds) and
 will fail loudly rather than emit a broken model.
+
+```bash
+python tools/render_preview.py
+```
+
+Regenerates `assets/preview.png`. Run this too after any model change so the README screenshot
+stays in sync.
 
 ## Packaging
 
