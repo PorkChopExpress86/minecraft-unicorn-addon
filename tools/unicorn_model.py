@@ -83,10 +83,10 @@ BONES = [
     {
         "name": "head", "parent": "neck", "pivot": [0, 38, -8],
         "cubes": [
-            {
-                "origin": [-4, 34, -18], "size": [8, 9, 10], "color": WHITE,
-                "face_colors": {"north": MUZZLE},
-            },
+            # The muzzle/nostrils/mouth are painted onto the front face in
+            # unicorn_texture.py rather than being a whole-face color, so the
+            # forehead stays white above them.
+            {"origin": [-4, 34, -18], "size": [8, 9, 10], "color": WHITE},
         ],
     },
     {

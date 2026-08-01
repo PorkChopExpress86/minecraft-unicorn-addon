@@ -9,8 +9,9 @@ rare natural spawn.
 
 ![Unicorn preview](assets/preview.png)
 
-*Rendered directly from the model data in `tools/unicorn_model.py` by `tools/render_preview.py` --
-not a hand-picked screenshot, so it can never show a different model than what actually ships.*
+*Rendered by `tools/render_preview.py` from the same geometry (`tools/unicorn_model.py`) and the
+same texture (`tools/unicorn_texture.py`) that the addon itself ships -- not a hand-picked
+screenshot, so it can't show a model or a texture the game won't. In-game lighting differs.*
 
 ## Structure
 
@@ -22,20 +23,21 @@ assets/
   preview.png          README screenshot, rendered by tools/render_preview.py
 tools/
   unicorn_model.py      Shared source of truth: the unicorn's bones/cubes/colors + geometry math
-  generate_addon.py     Generates every BP/RP file from unicorn_model.py
-  render_preview.py     Renders assets/preview.png from the same unicorn_model.py data
+  unicorn_texture.py    Shared texture atlas: UV packing, base colors, and the painted face
+  generate_addon.py     Generates every BP/RP file from the two modules above
+  render_preview.py     Renders assets/preview.png from those same two modules
   png_writer.py          Minimal PNG encoder shared by the two generators above
   sync-to-minecraft.ps1     Copies the packs into Minecraft's dev pack folders
   activate-in-world.ps1     Activates the packs inside an existing world save
 UnicornAddon.mcaddon    Packaged build (not committed -- see Packaging below)
 ```
 
-`UnicornAddon_BP` and `UnicornAddon_RP` are generated output. `tools/unicorn_model.py` is the
-actual source: it defines the unicorn's bones/cubes once, and both `tools/generate_addon.py` (the
-`.geo.json` + hand-painted texture + every UV coordinate) and `tools/render_preview.py` (the README
-screenshot above) derive from that single source, so the model, the addon, and its preview image
-can never drift out of sync with each other. To change the model or texture palette, edit
-`tools/unicorn_model.py` and regenerate both -- don't hand-edit the JSON/PNG under
+`UnicornAddon_BP` and `UnicornAddon_RP` are generated output. The real source is
+`tools/unicorn_model.py` (geometry) plus `tools/unicorn_texture.py` (texture). Both
+`tools/generate_addon.py` (the `.geo.json`, texture PNG, and every UV coordinate) and
+`tools/render_preview.py` (the README screenshot above) derive from those two modules, so the
+model, the shipped addon, and the preview image can't drift out of sync. To change the model,
+palette, or facial details, edit those modules and regenerate -- don't hand-edit the JSON/PNG under
 `UnicornAddon_BP`/`UnicornAddon_RP` directly.
 
 ## Requirements

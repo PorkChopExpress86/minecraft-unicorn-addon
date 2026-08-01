@@ -23,10 +23,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RP_UUID   = "d33ba74a-0711-42d9-b0ea-7f93fec39060"
-$BP_UUID   = "607de414-3833-44b6-ba45-81457be8303a"
-$TEST_UUID = "79dc887c-53aa-40d3-a86f-d1b6b09b5145"
-$VERSION   = @(1, 0, 0)
+# Read pack identity straight from the manifests rather than duplicating it
+# here -- a world entry whose version doesn't match the installed pack won't
+# resolve, and hardcoding it means every version bump silently breaks this
+# script until someone notices.
+$repoRoot = Split-Path -Parent $PSScriptRoot
+
+function Get-PackIdentity {
+    param([string]$PackDir)
+    $manifestPath = Join-Path $repoRoot "$PackDir\manifest.json"
+    if (-not (Test-Path $manifestPath)) { throw "manifest not found: $manifestPath" }
+    $m = Get-Content $manifestPath -Raw | ConvertFrom-Json
+    [pscustomobject]@{ Uuid = $m.header.uuid; Version = @($m.header.version) }
+}
+
+$rp   = Get-PackIdentity "UnicornAddon_RP"
+$bp   = Get-PackIdentity "UnicornAddon_BP"
+$test = Get-PackIdentity "UnicornAddon_TestBP"
 
 function Get-WorldRoots {
     $roots = @()
@@ -57,7 +70,7 @@ function Get-Worlds {
 }
 
 function Merge-PackList {
-    param([string]$File, [string[]]$Uuids)
+    param([string]$File, [object[]]$Packs)
 
     $entries = @()
     if (Test-Path $File) {
@@ -72,11 +85,15 @@ function Merge-PackList {
     }
 
     $added = 0
-    foreach ($u in $Uuids) {
-        if (-not ($entries | Where-Object { $_.pack_id -eq $u })) {
-            $entries += [pscustomobject]@{ pack_id = $u; version = $VERSION }
-            $added++
+    foreach ($p in $Packs) {
+        # Drop any stale entry for this pack so a version bump replaces it
+        # rather than leaving an unresolvable old version behind.
+        $existing = $entries | Where-Object { $_.pack_id -eq $p.Uuid }
+        if ($existing) {
+            $entries = @($entries | Where-Object { $_.pack_id -ne $p.Uuid })
         }
+        $entries += [pscustomobject]@{ pack_id = $p.Uuid; version = $p.Version }
+        if (-not $existing) { $added++ }
     }
 
     # ConvertTo-Json collapses a single-element array to an object, so force brackets.
@@ -118,14 +135,14 @@ if ($mcRunning) {
     return
 }
 
-$bpUuids = if ($NoTests) { @($BP_UUID) } else { @($BP_UUID, $TEST_UUID) }
+$bpPacks = if ($NoTests) { @($bp) } else { @($bp, $test) }
 
 Write-Host "  behavior packs:" -ForegroundColor Cyan
-$a = Merge-PackList -File (Join-Path $target "world_behavior_packs.json") -Uuids $bpUuids
+$a = Merge-PackList -File (Join-Path $target "world_behavior_packs.json") -Packs $bpPacks
 Write-Host "    $a added" -ForegroundColor Green
 
 Write-Host "  resource packs:" -ForegroundColor Cyan
-$b = Merge-PackList -File (Join-Path $target "world_resource_packs.json") -Uuids @($RP_UUID)
+$b = Merge-PackList -File (Join-Path $target "world_resource_packs.json") -Packs @($rp)
 Write-Host "    $b added" -ForegroundColor Green
 
 Write-Host ""

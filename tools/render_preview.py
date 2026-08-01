@@ -18,13 +18,13 @@ import os
 from png_writer import write_png
 from unicorn_model import (
     FACE_ORDER,
-    FACE_SHADE,
     iter_cubes,
     model_max,
     model_min,
-    shade,
     to_world,
 )
+from unicorn_texture import face_rect
+from unicorn_texture import pixels as TEXTURE
 
 OUT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "preview.png")
 
@@ -52,6 +52,20 @@ FACE_CORNERS = {
     "west": [(0, 0, 1), (0, 1, 1), (0, 1, 0), (0, 0, 0)],
     "up": [(0, 1, 1), (1, 1, 1), (1, 1, 0), (0, 1, 0)],
     "down": [(0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)],
+}
+
+# Maps a corner's (fx, fy, fz) cube fractions to (horizontal, vertical)
+# fractions within that face's texture rect. The vertical term is the one that
+# matters for correctness: texture V grows downward while model Y grows upward,
+# hence (1 - fy), which is what puts the painted mouth below the nostrils
+# instead of on the forehead.
+FACE_UV_PARAMS = {
+    "north": lambda fx, fy, fz: (fx, 1 - fy),
+    "south": lambda fx, fy, fz: (1 - fx, 1 - fy),
+    "east": lambda fx, fy, fz: (fz, 1 - fy),
+    "west": lambda fx, fy, fz: (1 - fz, 1 - fy),
+    "up": lambda fx, fy, fz: (fx, fz),
+    "down": lambda fx, fy, fz: (fx, 1 - fz),
 }
 
 
@@ -94,23 +108,38 @@ def plane_z_at(plane, x, y):
     return -(a * x + b * y + d) / c
 
 
-def fill_convex_polygon(pixels, depth_buffer, width, height, points_3d, color):
+def sample_texture(tu, tv, rect):
+    """Nearest-neighbour texel fetch, clamped to the face's own atlas rect so
+    edge rounding can never bleed in a neighbouring face's pixels."""
+    u0, v0, w, h = rect
+    x = min(max(int(tu), u0), u0 + w - 1)
+    y = min(max(int(tv), v0), v0 + h - 1)
+    return TEXTURE[y][x]
+
+
+def fill_convex_polygon(pixels, depth_buffer, width, height, points_3d, tex_coords, rect):
     """points_3d: [(screen_x, screen_y, camera_z), ...] for a planar quad.
+    tex_coords: matching [(tex_u, tex_v), ...] for those same corners.
 
     Depth-tested per pixel rather than sorted whole-polygon-at-a-time --
     painter's algorithm (sort-by-average-depth) breaks down whenever two
     polygons interpenetrate in depth instead of cleanly layering, which is
     exactly what happens where the mane hugs the neck. Larger camera_z means
     closer to the camera (see camera_rotate/backface cull convention).
+
+    UVs are interpolated as plain affine functions of screen position, which
+    is exact here because the projection is orthographic (no perspective
+    divide), so world -> screen is affine and UV is affine within a flat face.
     """
     points_2d = [(p[0], p[1]) for p in points_3d]
     plane = plane_from_points(*points_3d[:3])
+    u_plane = plane_from_points(*[(points_2d[i][0], points_2d[i][1], tex_coords[i][0]) for i in range(3)])
+    v_plane = plane_from_points(*[(points_2d[i][0], points_2d[i][1], tex_coords[i][1]) for i in range(3)])
 
     ys = [p[1] for p in points_2d]
     y_min = max(0, int(math.floor(min(ys))))
     y_max = min(height - 1, int(math.ceil(max(ys))))
     n = len(points_2d)
-    r, g, b, _ = color
     for y in range(y_min, y_max + 1):
         sample = y + 0.5
         xs = []
@@ -133,6 +162,11 @@ def fill_convex_polygon(pixels, depth_buffer, width, height, points_3d, color):
             z = plane_z_at(plane, x + 0.5, sample)
             if z is None or z < depth_buffer[y][x]:
                 continue
+            tu = plane_z_at(u_plane, x + 0.5, sample)
+            tv = plane_z_at(v_plane, x + 0.5, sample)
+            if tu is None or tv is None:
+                continue
+            r, g, b, _ = sample_texture(tu, tv, rect)
             depth_buffer[y][x] = z
             pixels[y][x] = (r, g, b, 255)
 
@@ -168,30 +202,37 @@ def main():
     for bone, cube in iter_cubes():
         ox, oy, oz = cube["origin"]
         sx, sy, sz = cube["size"]
-        face_colors = cube.get("face_colors", {})
         for face_name in FACE_ORDER:
-            local_corners = [
-                (ox + fx * sx, oy + fy * sy, oz + fz * sz)
-                for fx, fy, fz in FACE_CORNERS[face_name]
+            corner_fractions = FACE_CORNERS[face_name]
+            world_corners = [
+                to_world((ox + fx * sx, oy + fy * sy, oz + fz * sz), bone["name"])
+                for fx, fy, fz in corner_fractions
             ]
-            world_corners = [to_world(c, bone["name"]) for c in local_corners]
             normal = normalize(cross(sub(world_corners[1], world_corners[0]), sub(world_corners[2], world_corners[0])))
-            color = shade(face_colors.get(face_name, cube["color"]), FACE_SHADE[face_name])
-            faces.append((world_corners, normal, color))
+
+            rect = face_rect(cube, face_name)
+            u0, v0, fw, fh = rect
+            to_params = FACE_UV_PARAMS[face_name]
+            tex_coords = []
+            for fx, fy, fz in corner_fractions:
+                a, b = to_params(fx, fy, fz)
+                tex_coords.append((u0 + a * fw, v0 + b * fh))
+
+            faces.append((world_corners, normal, tex_coords, rect))
 
     # --- Camera transform + backface cull ---
     camera_faces = []
-    for world_corners, normal, color in faces:
+    for world_corners, normal, tex_coords, rect in faces:
         centered = [sub(c, model_center) for c in world_corners]
         cam_corners = [camera_rotate(c) for c in centered]
         cam_normal = camera_rotate(normal)
         if cam_normal[2] <= 0:
             continue  # facing away from the camera
-        camera_faces.append((cam_corners, color))
+        camera_faces.append((cam_corners, tex_coords, rect))
 
     # --- Fit projection to canvas ---
-    xs = [c[0] for corners, _ in camera_faces for c in corners]
-    ys = [c[1] for corners, _ in camera_faces for c in corners]
+    xs = [c[0] for corners, _, _ in camera_faces for c in corners]
+    ys = [c[1] for corners, _, _ in camera_faces for c in corners]
     span_x = max(xs) - min(xs)
     span_y = max(ys) - min(ys)
     scale = min((CANVAS_W - 2 * PADDING) / span_x, (CANVAS_H - 2 * PADDING - 40) / span_y)
@@ -223,9 +264,9 @@ def main():
 
     # --- Rasterize model with a per-pixel depth buffer ---
     depth_buffer = [[float("-inf")] * CANVAS_W for _ in range(CANVAS_H)]
-    for cam_corners, color in camera_faces:
+    for cam_corners, tex_coords, rect in camera_faces:
         points_3d = [(*project(c), c[2]) for c in cam_corners]
-        fill_convex_polygon(pixels, depth_buffer, CANVAS_W, CANVAS_H, points_3d, color)
+        fill_convex_polygon(pixels, depth_buffer, CANVAS_W, CANVAS_H, points_3d, tex_coords, rect)
 
     write_png(OUT_PATH, CANVAS_W, CANVAS_H, pixels)
     print(f"wrote {OUT_PATH} ({len(camera_faces)} faces rendered, {len(faces) - len(camera_faces)} culled)")

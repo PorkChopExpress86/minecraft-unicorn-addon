@@ -4,21 +4,17 @@ import os
 
 from png_writer import write_png
 from unicorn_model import (
-    BONE_BY_NAME,
     BONES,
     COLLISION_W,
     COLLISION_H,
-    FACE_ORDER,
-    FACE_SHADE,
     SEAT_Y,
     SPAN_X,
     SPAN_Y,
     SPAN_Z,
-    face_size,
     model_max,
     model_min,
-    shade,
 )
+from unicorn_texture import TEXTURE_H, TEXTURE_W, pixels, used_height
 
 # ---------------------------------------------------------------------------
 # Constants -- single source of truth for every identifier used across files
@@ -41,8 +37,11 @@ RP_MODULE_UUID = "dc4bfd57-53a7-4086-9481-71b1dfa76008"
 BP_HEADER_UUID = "607de414-3833-44b6-ba45-81457be8303a"
 BP_MODULE_UUID = "b049c417-7246-43b7-8654-830293aee219"
 
-TEXTURE_W = 256
-PAD = 2  # >=2 so every face gets a private 1px bleed ring (no mipmap color bleed)
+# Bedrock requires the RP header version, the BP header version, and the BP's
+# dependency-on-RP version to agree, or the packs can silently fail to load
+# together. Driving all three from one constant makes that impossible to get
+# wrong.
+PACK_VERSION = [1, 0, 1]
 
 
 def write_json(path, data):
@@ -66,61 +65,9 @@ vb_width = math.ceil(max(SPAN_X, SPAN_Z) / 16.0 * 2) / 2 + 0.5
 vb_height = math.ceil(SPAN_Y / 16.0 * 2) / 2 + 0.5
 vb_offset_y = round((model_min[1] + model_max[1]) / 2 / 16.0, 2)
 
-# ---------------------------------------------------------------------------
-# Shelf-pack every cube face into the atlas
-# ---------------------------------------------------------------------------
-
-cursor_x, cursor_y, row_h = 0, 0, 0
-allocations = []
-
-for bone in BONES:
-    for cube in bone["cubes"]:
-        cube["uv"] = {}
-        face_colors = cube.get("face_colors", {})
-        for face in FACE_ORDER:
-            w, h = face_size(cube["size"], face)
-            w, h = int(math.ceil(w)), int(math.ceil(h))
-            if cursor_x + w > TEXTURE_W:
-                cursor_x = 0
-                cursor_y += row_h + PAD
-                row_h = 0
-            u, v = cursor_x, cursor_y
-            cube["uv"][face] = {"uv": [u, v], "uv_size": [w, h]}
-            allocations.append(((u, v, w, h), shade(face_colors.get(face, cube["color"]), FACE_SHADE[face])))
-            cursor_x += w + PAD
-            row_h = max(row_h, h)
-
-used_height = cursor_y + row_h
-TEXTURE_H = 1
-while TEXTURE_H < used_height:
-    TEXTURE_H *= 2
-
-for (u, v, w, h), _ in allocations:
-    assert u + w <= TEXTURE_W and v + h <= TEXTURE_H, "UV rect out of atlas bounds"
-
-# ---------------------------------------------------------------------------
-# Paint: bleed ring first, then exact rects on top
-# ---------------------------------------------------------------------------
-
-pixels = [[(0, 0, 0, 0)] * TEXTURE_W for _ in range(TEXTURE_H)]
-
-for expand in (1, 0):
-    for (u, v, w, h), color in allocations:
-        for yy in range(max(0, v - expand), min(TEXTURE_H, v + h + expand)):
-            for xx in range(max(0, u - expand), min(TEXTURE_W, u + w + expand)):
-                pixels[yy][xx] = color
-
-# Eyes: horizontally centered on the head's side faces so the result reads
-# correctly regardless of which way Bedrock winds the east/west UV axis.
-head_cube = BONE_BY_NAME["head"]["cubes"][0]
-for face in ("east", "west"):
-    u, v = head_cube["uv"][face]["uv"]
-    w, h = head_cube["uv"][face]["uv_size"]
-    ex, ey = u + w // 2 - 1, v + h // 3 - 1
-    for yy in range(ey, ey + 2):
-        for xx in range(ex, ex + 2):
-            pixels[yy][xx] = (20, 20, 25, 255)
-
+# The atlas (packing, base colors, and the painted face) lives in
+# unicorn_texture.py so tools/render_preview.py can sample the very same
+# pixels. Importing it also populates cube["uv"] used by the geometry below.
 write_png(os.path.join(RP_DIR, "textures", "entity", "unicorn.png"), TEXTURE_W, TEXTURE_H, pixels)
 
 # ---------------------------------------------------------------------------
@@ -312,11 +259,11 @@ write_json(os.path.join(RP_DIR, "manifest.json"), {
         "name": "Ride a Unicorn RP",
         "description": "Resource pack for the Ride a Unicorn addon",
         "uuid": RP_HEADER_UUID,
-        "version": [1, 0, 0],
+        "version": PACK_VERSION,
         "min_engine_version": [1, 21, 80],
         "pack_scope": "world",
     },
-    "modules": [{"type": "resources", "uuid": RP_MODULE_UUID, "version": [1, 0, 0]}],
+    "modules": [{"type": "resources", "uuid": RP_MODULE_UUID, "version": PACK_VERSION}],
 })
 
 write_json(os.path.join(BP_DIR, "manifest.json"), {
@@ -325,11 +272,11 @@ write_json(os.path.join(BP_DIR, "manifest.json"), {
         "name": "Ride a Unicorn BP",
         "description": "Behavior pack for the Ride a Unicorn addon",
         "uuid": BP_HEADER_UUID,
-        "version": [1, 0, 0],
+        "version": PACK_VERSION,
         "min_engine_version": [1, 21, 80],
     },
-    "modules": [{"type": "data", "uuid": BP_MODULE_UUID, "version": [1, 0, 0]}],
-    "dependencies": [{"uuid": RP_HEADER_UUID, "version": [1, 0, 0]}],
+    "modules": [{"type": "data", "uuid": BP_MODULE_UUID, "version": PACK_VERSION}],
+    "dependencies": [{"uuid": RP_HEADER_UUID, "version": PACK_VERSION}],
 })
 
 for d, nm in ((BP_DIR, "BP"), (RP_DIR, "RP")):
