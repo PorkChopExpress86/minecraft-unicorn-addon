@@ -4,6 +4,9 @@ A Minecraft Bedrock Edition addon that adds a rideable unicorn: a custom entity 
 geometry, texture, and animations, tameable-free riding (walk up and interact to mount), and a
 rare natural spawn.
 
+**[Download the latest `.mcaddon`](https://github.com/PorkChopExpress86/minecraft-unicorn-addon/releases/latest)**
+-- double-click it to import into Minecraft. No build step needed to just play it.
+
 ![Unicorn preview](assets/preview.png)
 
 *Rendered directly from the model data in `tools/unicorn_model.py` by `tools/render_preview.py` --
