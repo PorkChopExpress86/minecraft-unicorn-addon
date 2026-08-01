@@ -1,0 +1,30 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Ride a Unicorn - Test Suite",
+    "description": "Dev-only automated test pack. Do not ship with the addon.",
+    "uuid": "79dc887c-53aa-40d3-a86f-d1b6b09b5145",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 80]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "b4440069-3367-430a-aa32-e99d8b732d71",
+      "version": [1, 0, 0]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "4cf5c05a-d265-4a6c-82f8-c28bf4039a2c",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.0.0"
+    }
+  ]
+}

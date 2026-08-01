@@ -1,0 +1,30 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Ride a Unicorn RP",
+    "description": "Resource pack for the Ride a Unicorn addon",
+    "uuid": "d33ba74a-0711-42d9-b0ea-7f93fec39060",
+    "version": [
+      1,
+      0,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      80
+    ],
+    "pack_scope": "world"
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "dc4bfd57-53a7-4086-9481-71b1dfa76008",
+      "version": [
+        1,
+        0,
+        0
+      ]
+    }
+  ]
+}

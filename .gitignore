@@ -1,0 +1,12 @@
+# Build output - regenerate with `python tools/generate_addon.py` and
+# package per README.md rather than committing the binary.
+*.mcaddon
+*.mcpack
+
+# World-activation backups written by tools/activate-in-world.ps1
+*.bak-*
+
+__pycache__/
+*.pyc
+Thumbs.db
+.DS_Store

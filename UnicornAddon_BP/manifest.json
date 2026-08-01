@@ -1,0 +1,39 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Ride a Unicorn BP",
+    "description": "Behavior pack for the Ride a Unicorn addon",
+    "uuid": "607de414-3833-44b6-ba45-81457be8303a",
+    "version": [
+      1,
+      0,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      80
+    ]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "b049c417-7246-43b7-8654-830293aee219",
+      "version": [
+        1,
+        0,
+        0
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "d33ba74a-0711-42d9-b0ea-7f93fec39060",
+      "version": [
+        1,
+        0,
+        0
+      ]
+    }
+  ]
+}
